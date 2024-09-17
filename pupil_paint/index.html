@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+	<meta charset="UTF-8">
+	<meta name="viewport" content="width=device-width, initial-scale=1.0">
+	<title>Pupil Painter</title>
+	<style>
+		body, html {
+			height: 100%;
+			margin: 1em;
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			text-align: center;
+			flex-direction: column;
+			background: #222;
+			color: #ddd;
+		}
+
+		button {
+			padding: 15px 30px;
+			font-size: 18px;
+		}
+
+		#after-ready {
+			display: none;
+		}
+
+		#error-message {
+			display: none;
+			font-weight: bold;
+			color: #cc3333;
+		}
+
+	</style>
+	<script>
+		async function onPlayerReady() {
+			try {
+				const response = await fetch('/play', {
+					method: 'POST',
+					headers: {
+						'Content-Type': 'application/json',
+					},
+				});
+
+				if (response.ok) {
+					document.getElementById('before-ready').style.display = 'none';
+					document.getElementById('after-ready').style.display = 'block';
+					window.close();
+				} else {
+					document.getElementById('error-message').style.display = '';
+					document.getElementById('error-message').innerHTML = 'Response error: ' + response.statusText
+					console.error('Response error', response);
+				}
+			} catch (error) {
+				document.getElementById('error-message').innerHTML = 'Submit error: ' + error
+				console.error('Submit error', error);
+			}
+		}
+	</script>
+</head>
+
+<body>
+	<div id="before-ready">
+		<p>Please ensure that the Neon Companion app is running and that your Neon is connected and detected by the app.</p>
+		<p>When you are ready, press the button below.</p>
+		<button onclick="onPlayerReady()">Connect<br/>to<br/>Pupil Paint!</button>
+	</div>
+	<div id="after-ready">
+		<p>Your device is connecting!</p>
+		<p>You may now close this window.</p>
+	</div>
+	<div id="error-message"></div>
+</body>
+</html>
