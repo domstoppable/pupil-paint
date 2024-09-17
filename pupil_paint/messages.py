@@ -2,8 +2,9 @@ from dataclasses import dataclass
 
 
 @dataclass
-class ClientIdentifyMsg:
+class ClientStatusMsg:
     host: str
+    status: str
 
 @dataclass
 class GazePointMsg:

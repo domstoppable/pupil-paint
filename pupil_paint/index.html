@@ -22,6 +22,10 @@
 			font-size: 18px;
 		}
 
+		#pending {
+			display: none;
+		}
+
 		#after-ready {
 			display: none;
 		}
@@ -34,6 +38,7 @@
 
 	</style>
 	<script>
+		let ws;
 		async function onPlayerReady() {
 			try {
 				const response = await fetch('/play', {
@@ -45,8 +50,24 @@
 
 				if (response.ok) {
 					document.getElementById('before-ready').style.display = 'none';
-					document.getElementById('after-ready').style.display = 'block';
-					window.close();
+					document.getElementById('pending').style.display = 'block';
+
+					ws = new WebSocket(`ws://${window.location.host}/ws`);
+					ws.onmessage = function(event) {
+						if(event.data == 'stream-started'){
+							if (navigator.vibrate) {
+								navigator.vibrate(250);
+							}
+							document.getElementById('pending').style.display = 'none';
+							document.getElementById('after-ready').style.display = 'block';
+						}else{
+							alert('Uknown command:', event.data)
+						}
+					};
+
+					window.onbeforeunload = function() {
+						ws.close();
+					};
 				} else {
 					document.getElementById('error-message').style.display = '';
 					document.getElementById('error-message').innerHTML = 'Response error: ' + response.statusText
@@ -66,8 +87,13 @@
 		<p>When you are ready, press the button below.</p>
 		<button onclick="onPlayerReady()">Connect<br/>to<br/>Pupil Paint!</button>
 	</div>
+	<div id="pending">
+		<p>Connecting...</p>
+		<p>⏳</p>
+	</div>
 	<div id="after-ready">
-		<p>Your device is connecting!</p>
+		<p>You are connected!</p>
+		<p>🕶️</p>
 		<p>You may now close this window.</p>
 	</div>
 	<div id="error-message"></div>

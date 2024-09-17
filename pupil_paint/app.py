@@ -7,7 +7,7 @@ import pygame
 from .server import run_server
 from .client import get_surface_gazes
 from .local_ip import get_local_ip
-from .messages import QuitMsg, ClientIdentifyMsg, GazePointMsg
+from .messages import QuitMsg, ClientStatusMsg, GazePointMsg
 from .image_helpers import make_marker, make_qr
 
 
@@ -63,8 +63,8 @@ class PupilPainter:
         pygame.init()
         self.server_proc.start()
 
-        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-        # self.screen = pygame.display.set_mode((1920, 1080))
+        #self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        self.screen = pygame.display.set_mode((1920, 1080))
         self.screen_width, self.screen_height = self.screen.get_size()
 
         self.font = pygame.font.SysFont('monospace', 32)
@@ -161,20 +161,21 @@ class PupilPainter:
     def check_for_new_clients(self):
         while not self.client_info_queue.empty():
             message = self.client_info_queue.get()
-            if isinstance(message, ClientIdentifyMsg):
+            if isinstance(message, ClientStatusMsg):
                 client_ip = message.host
-                old_color = None
-                if client_ip in self.clients:
-                    self.clients[client_ip].command_queue.put(QuitMsg())
-                    old_color = self.clients[client_ip].color
+                if message.status == 'new':
+                    old_color = None
+                    if client_ip in self.clients:
+                        self.clients[client_ip].command_queue.put(QuitMsg())
+                        old_color = self.clients[client_ip].color
 
-                client = ClientMeta(client_ip, self.gaze_data_queue, old_color)
-                client.process.start()
-                if client.color not in self.scoreboard:
-                    self.scoreboard[client.color] = 0
+                    client = ClientMeta(client_ip, self.gaze_data_queue, old_color)
+                    client.process.start()
+                    if client.color not in self.scoreboard:
+                        self.scoreboard[client.color] = 0
 
-                self.clients[client_ip] = client
-                print("Starting client", client_ip)
+                    self.clients[client_ip] = client
+                    print("Starting client", client_ip)
 
     def check_for_new_gazes(self):
         while not self.gaze_data_queue.empty():
@@ -212,6 +213,10 @@ class PupilPainter:
                                     self.scoreboard[new_color] += 1
                                 else:
                                     self.scoreboard[new_color] = 1
+
+            elif isinstance(data, ClientStatusMsg):
+                if data.status == 'started':
+                    self.server_command_queue.put(data)
 
     def cleanup(self):
         pygame.quit()

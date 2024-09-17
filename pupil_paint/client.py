@@ -4,7 +4,7 @@ import json
 from pupil_labs.realtime_api.simple import Device
 from pupil_labs.real_time_screen_gaze.gaze_mapper import GazeMapper
 
-from .messages import GazePointMsg, QuitMsg
+from .messages import ClientStatusMsg, GazePointMsg, QuitMsg
 
 
 def get_surface_gazes(host, marker_verts, surf_size, command_queue, data_queue):
@@ -24,6 +24,10 @@ def get_surface_gazes(host, marker_verts, surf_size, command_queue, data_queue):
 
     gaze_mapper = GazeMapper(calibration)
     screen_surface = gaze_mapper.add_surface(marker_verts, surf_size)
+
+    # receive one frame to initiate the stream
+    device.receive_matched_scene_video_frame_and_gaze()
+    data_queue.put(ClientStatusMsg(host, 'started'))
 
     keep_running = True
     while keep_running:
