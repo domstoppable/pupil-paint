@@ -61,8 +61,8 @@ class PupilPainter:
         pygame.init()
         self.server_proc.start()
 
-        #self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
-        self.screen = pygame.display.set_mode((1920, 1080))
+        self.screen = pygame.display.set_mode((0, 0), pygame.FULLSCREEN)
+        #self.screen = pygame.display.set_mode((1920, 1080))
         self.screen_width, self.screen_height = self.screen.get_size()
 
         self.font = pygame.font.SysFont('monospace', 32)
