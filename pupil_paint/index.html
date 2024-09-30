@@ -7,7 +7,8 @@
 	<style>
 		body, html {
 			height: 100%;
-			margin: 1em;
+		}
+		body {
 			display: flex;
 			justify-content: center;
 			align-items: center;
@@ -15,11 +16,10 @@
 			flex-direction: column;
 			background: #222;
 			color: #ddd;
+			margin: 1em;
 		}
 
-		button {
-			padding: 15px 30px;
-			font-size: 18px;
+		#before-ready {
 		}
 
 		#pending {
@@ -28,6 +28,24 @@
 
 		#after-ready {
 			display: none;
+		}
+
+		#swatches {
+			display: flex;
+			flex-wrap: wrap;
+			justify-content: center;
+			gap: 2em;
+		}
+
+		#swatches label {
+			background-color: #f0f0f0;
+			width: 4em;
+			height: 4em;
+			cursor: pointer;
+			border-radius: 5px;
+			border: none;
+			display: flex;
+			justify-content: center;
 		}
 
 		#error-message {
@@ -54,14 +72,40 @@
 
 					ws = new WebSocket(`ws://${window.location.host}/ws`);
 					ws.onmessage = function(event) {
-						if(event.data == 'stream-started'){
+						let data = JSON.parse(event.data);
+						if(data['type'] == 'stream-started'){
 							if (navigator.vibrate) {
 								navigator.vibrate(250);
 							}
 							document.getElementById('pending').style.display = 'none';
 							document.getElementById('after-ready').style.display = 'block';
+
+						}else if(data['type'] == 'swatches'){
+							let swatchContainer = document.getElementById('swatches');
+							for(let idx in data['colors']){
+								let color = data['colors'][idx];
+								let radioButton = document.createElement("input");
+								radioButton.type = "radio";
+								radioButton.id = `swatch-${idx}`
+								radioButton.name = "color"
+								radioButton.checked = (idx == 0);
+
+								let label = document.createElement("label");
+								label.style = `background: rgb(${color})`;
+								label.for = radioButton;
+								label.addEventListener('click', () => {
+									ws.send(JSON.stringify({
+										'type': 'swatch-selection',
+										'color': color
+									}))
+								});
+								label.appendChild(radioButton);
+
+								swatchContainer.appendChild(label)
+							}
+
 						}else{
-							alert('Uknown command:', event.data)
+							console.error('Uknown command:', data)
 						}
 					};
 
@@ -82,6 +126,7 @@
 </head>
 
 <body>
+	<h1>Pupil Paint!</h1>
 	<div id="before-ready">
 		<p>Please ensure that the Neon Companion app is running and that your Neon is connected and detected by the app.</p>
 		<p>When you are ready, press the button below.</p>
@@ -92,9 +137,9 @@
 		<p>⏳</p>
 	</div>
 	<div id="after-ready">
-		<p>You are connected!</p>
-		<p>🕶️</p>
-		<p>You may now close this window.</p>
+		<h2>Connected!</h2>
+		<div id="swatches"></div>
+
 	</div>
 	<div id="error-message"></div>
 </body>

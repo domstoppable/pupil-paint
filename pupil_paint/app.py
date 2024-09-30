@@ -7,12 +7,11 @@ import pygame
 from .server import run_server
 from .client import get_surface_gazes
 from .local_ip import get_local_ip
-from .messages import QuitMsg, ClientStatusMsg, GazePointMsg
+from .messages import QuitMsg, ClientStatusMsg, GazePointMsg, SwatchesMsg, SwatchSelectionMsg
 from .image_helpers import make_marker, make_qr
 
 
 class ClientMeta:
-    _color_idx = -1
     marker_verts = None
     screen_size = None
 
@@ -29,11 +28,10 @@ class ClientMeta:
 
     def __init__(self, host, data_queue, color=None):
         if color is None:
-            ClientMeta._color_idx = (ClientMeta._color_idx + 1) % len(ClientMeta.colors)
-            color = ClientMeta.colors[ClientMeta._color_idx]
+            color = ClientMeta.colors[0]
 
         self.host = host
-        self.color = color
+        self.color = tuple(color)
         self.command_queue = mp.Queue()
         self.data_queue = data_queue
 
@@ -124,6 +122,8 @@ class PupilPainter:
 
         self.clients = {}
 
+        self.server_command_queue.put(SwatchesMsg(ClientMeta.colors))
+
         self.running = True
         while self.running:
             self.check_for_events()
@@ -177,6 +177,13 @@ class PupilPainter:
                     self.clients[client_ip] = client
                     print("Starting client", client_ip)
 
+            elif isinstance(message, SwatchSelectionMsg):
+                client = self.clients[message.host]
+
+                client.color = message.color
+                if client.color not in self.scoreboard:
+                    self.scoreboard[client.color] = 0
+
     def check_for_new_gazes(self):
         while not self.gaze_data_queue.empty():
             data = self.gaze_data_queue.get()
@@ -211,7 +218,7 @@ class PupilPainter:
                                 new_color = (new_color.r, new_color.g, new_color.b)
                                 if new_color in self.scoreboard:
                                     self.scoreboard[new_color] += 1
-                                else:
+                                elif new_color in ClientMeta.colors:
                                     self.scoreboard[new_color] = 1
 
             elif isinstance(data, ClientStatusMsg):

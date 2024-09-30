@@ -2,8 +2,9 @@ from pathlib import Path
 
 import asyncio
 from aiohttp import web
+import json
 
-from .messages import ClientStatusMsg, QuitMsg
+from .messages import ClientStatusMsg, SwatchesMsg, QuitMsg, SwatchSelectionMsg
 
 
 class AsyncServer:
@@ -15,6 +16,7 @@ class AsyncServer:
         with done_template_file.open('rt') as f:
             self.form_template = f.read()
 
+        self.colors = []
         self.client_sockets = {}
 
     async def handle_get(self, request):
@@ -29,9 +31,13 @@ class AsyncServer:
         self.client_sockets[request.remote] = ws
         await ws.prepare(request)
 
+        await ws.send_str(f'{{"type": "swatches", "colors": {[list(c) for c in self.colors]}}}')
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
-                await ws.send_str(f"Received: {msg.data}")
+                data = json.loads(msg.data)
+                if data['type'] == 'swatch-selection':
+                    self.response_queue.put(SwatchSelectionMsg(request.remote, tuple(data['color'])))
+
             elif msg.type == web.WSMsgType.BINARY:
                 await ws.send_bytes(msg.data)
             elif msg.type == web.WSMsgType.CLOSE:
@@ -53,9 +59,20 @@ class AsyncServer:
             if isinstance(data, QuitMsg):
                 await self.site.stop()
                 break
+
             elif isinstance(data, ClientStatusMsg):
                 if data.status == 'started':
-                    await self.client_sockets[data.host].send_str('stream-started')
+                    socket = self.client_sockets[data.host]
+                    await socket.send_str('{"type": "stream-started"}')
+
+            elif isinstance(data, SwatchesMsg):
+                self.colors = data.colors
+                tasks = [
+                    socket.send_str(f'{{"type": "swatches", "colors": {[list(c) for c in self.colors]}}}')
+                    for socket in self.client_sockets.values()
+                ]
+                asyncio.gather(*tasks)
+
             else:
                 print(f"Unknown command: {data}")
 

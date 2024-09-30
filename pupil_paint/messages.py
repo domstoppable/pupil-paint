@@ -19,3 +19,12 @@ class QuitMsg:
 @dataclass
 class DebugMsg:
     text: str
+
+@dataclass
+class SwatchesMsg:
+    colors: list
+
+@dataclass
+class SwatchSelectionMsg:
+    host: str
+    color: tuple
