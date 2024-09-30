@@ -1,0 +1,4 @@
+pupil-labs-realtime-api
+real-time-screen-gaze
+pygame
+qrcode
