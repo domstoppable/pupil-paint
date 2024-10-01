@@ -174,16 +174,16 @@ class PupilPainter:
             self.screen.fill((128, 128, 128), self.canvas_rect.inflate(10, 10))
             self.screen.blit(self.canvas, (self.canvas_rect.x, self.canvas_rect.y))
 
-            # paint user user crosshairs
+            # paint the scoreboard
+            self.draw_scoreboard()
+
+            # paint user crosshairs
             for client in self.clients.values():
                 if client.last_gaze is None or self.iteration_start_time - client.last_gaze_time > 1.0:
                     continue
 
                 pygame.draw.circle(self.screen, (255, 255, 255), client.last_gaze, 21, 7)
                 pygame.draw.circle(self.screen, client.color or (200, 200, 200), client.last_gaze, 20, 5)
-
-            # paint the scoreboard
-            self.draw_scoreboard()
 
             # paint the markers
             self.screen.blit(markers[0], (0, 0))
@@ -294,7 +294,6 @@ class PupilPainter:
         total_pixels = self.canvas_rect.width * self.canvas_rect.height
 
         score_rect = pygame.Rect(0, 0, self.tag_size, self.screen_height)
-        self.screen.fill((0, 0, 0), score_rect)
 
         y = self.tag_size * 1.1
         for color, score in self.scoreboard.items():
