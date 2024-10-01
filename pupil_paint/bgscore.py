@@ -1,6 +1,5 @@
 import time
 from multiprocessing import shared_memory
-from uuid import uuid4
 
 import numpy as np
 
