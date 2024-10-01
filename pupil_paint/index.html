@@ -28,6 +28,8 @@
 
 		#after-ready {
 			display: none;
+			flex-direction: column;
+			gap: 2em;
 		}
 
 		#swatches {
@@ -57,6 +59,7 @@
 	</style>
 	<script>
 		let ws;
+
 		async function onPlayerReady() {
 			try {
 				const response = await fetch('/play', {
@@ -74,35 +77,12 @@
 					ws.onmessage = function(event) {
 						let data = JSON.parse(event.data);
 						if(data['type'] == 'stream-started'){
-							if (navigator.vibrate) {
-								navigator.vibrate(250);
-							}
+							vibe(500);
 							document.getElementById('pending').style.display = 'none';
-							document.getElementById('after-ready').style.display = 'block';
+							document.getElementById('after-ready').style.display = 'flex';
 
 						}else if(data['type'] == 'swatches'){
-							let swatchContainer = document.getElementById('swatches');
-							for(let idx in data['colors']){
-								let color = data['colors'][idx];
-								let radioButton = document.createElement("input");
-								radioButton.type = "radio";
-								radioButton.id = `swatch-${idx}`
-								radioButton.name = "color"
-								radioButton.checked = (idx == 0);
-
-								let label = document.createElement("label");
-								label.style = `background: rgb(${color})`;
-								label.for = radioButton;
-								label.addEventListener('click', () => {
-									ws.send(JSON.stringify({
-										'type': 'swatch-selection',
-										'color': color
-									}))
-								});
-								label.appendChild(radioButton);
-
-								swatchContainer.appendChild(label)
-							}
+							loadSwatches(data['colors']);
 
 						}else{
 							console.error('Uknown command:', data)
@@ -122,6 +102,41 @@
 				console.error('Submit error', error);
 			}
 		}
+
+		function loadSwatches(swatches){
+			let swatchContainer = document.getElementById('swatches');
+
+			for(let idx in swatches){
+				let color = swatches[idx];
+				let radioButton = document.createElement("input");
+				radioButton.type = "radio";
+				radioButton.id = `swatch-${idx}`
+				radioButton.name = "color"
+				radioButton.addEventListener('click', e => e.preventDefault());
+
+				let label = document.createElement("label");
+				label.style = `background: rgb(${color})`;
+				label.for = radioButton;
+				label.addEventListener('mousedown', (e) => {
+					ws.send(JSON.stringify({
+						'type': 'draw',
+						'color': color,
+						'enabled': !radioButton.checked,
+					}))
+					radioButton.checked = !radioButton.checked;
+					vibe(125 + (radioButton.checked * 125));
+				});
+				label.appendChild(radioButton);
+
+				swatchContainer.appendChild(label)
+			}
+		}
+
+		function vibe(duration){
+			if(navigator.vibrate){
+				navigator.vibrate(duration);
+			}
+		}
 	</script>
 </head>
 
@@ -132,15 +147,16 @@
 		<p>When you are ready, press the button below.</p>
 		<button onclick="onPlayerReady()">Connect<br/>to<br/>Pupil Paint!</button>
 	</div>
+
 	<div id="pending">
 		<p>Connecting...</p>
 		<p>⏳</p>
 	</div>
-	<div id="after-ready">
-		<h2>Connected!</h2>
-		<div id="swatches"></div>
 
+	<div id="after-ready">
+		<div id="swatches"></div>
 	</div>
+
 	<div id="error-message"></div>
 </body>
 </html>

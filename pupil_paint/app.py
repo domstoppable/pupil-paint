@@ -1,7 +1,8 @@
 import multiprocessing as mp
-from multiprocessing import Array, shared_memory
+from multiprocessing import shared_memory
 import random
 from pathlib import Path
+import time
 
 import pygame
 import numpy as np
@@ -15,7 +16,7 @@ from .messages import (
     ClientStatusMsg,
     GazePointMsg,
     SwatchesMsg,
-    SwatchSelectionMsg,
+    DrawMsg,
     CalculateScoreMsg,
 )
 from .image_helpers import make_marker, make_qr
@@ -37,13 +38,16 @@ class ClientMeta:
     ]
 
     def __init__(self, host, data_queue, color=None):
-        if color is None:
-            color = ClientMeta.colors[0]
+        if color is not None:
+            color = tuple(color)
 
         self.host = host
-        self.color = tuple(color)
+        self.color = color
         self.command_queue = mp.Queue()
         self.data_queue = data_queue
+        self.last_gaze = None
+        self.last_gaze_time = None
+        self.enabled = False
 
         self.process = mp.Process(
             target=get_surface_gazes,
@@ -151,6 +155,8 @@ class PupilPainter:
 
         self.running = True
         while self.running:
+            self.iteration_start_time = time.time()
+
             self.check_for_events()
             if not self.running:
                 break
@@ -165,6 +171,14 @@ class PupilPainter:
             # paint the updated canvas to the screen
             self.screen.fill((128, 128, 128), self.canvas_rect.inflate(10, 10))
             self.screen.blit(self.canvas, (self.canvas_rect.x, self.canvas_rect.y))
+
+            # paint user user crosshairs
+            for client in self.clients.values():
+                if client.last_gaze is None or self.iteration_start_time - client.last_gaze_time > 1.0:
+                    continue
+
+                pygame.draw.circle(self.screen, (255, 255, 255), client.last_gaze, 21, 7)
+                pygame.draw.circle(self.screen, client.color or (200, 200, 200), client.last_gaze, 20, 5)
 
             # paint the scoreboard
             self.draw_scoreboard()
@@ -204,18 +218,14 @@ class PupilPainter:
 
                     client = ClientMeta(client_ip, self.gaze_data_queue, old_color)
                     client.process.start()
-                    if client.color not in self.scoreboard:
-                        self.scoreboard[client.color] = 0
 
                     self.clients[client_ip] = client
                     print("Starting client", client_ip)
 
-            elif isinstance(message, SwatchSelectionMsg):
+            elif isinstance(message, DrawMsg):
                 client = self.clients[message.host]
-
                 client.color = message.color
-                if client.color not in self.scoreboard:
-                    self.scoreboard[client.color] = 0
+                client.enabled = message.enabled
 
     def check_for_new_gazes(self):
         while not self.gaze_data_queue.empty():
@@ -224,20 +234,26 @@ class PupilPainter:
             if isinstance(data, GazePointMsg):
                 gaze_pos = data.x, data.y
                 client_info = self.clients[data.host]
+                client_info.last_gaze = gaze_pos
+                client_info.last_gaze_time = self.iteration_start_time
 
-                if self.canvas_rect.x <= gaze_pos[0] < self.canvas_rect.x + self.canvas_rect.width:
-                    tinted_brush = self.brush_image.copy()
-                    tinted_brush.fill(client_info.color, None, pygame.BLEND_MULT)
-                    tinted_brush = pygame.transform.rotate(tinted_brush, random.uniform(0, 360))
+                if not client_info.enabled or client_info.color is None:
+                    pass
 
-                    brush_rect = tinted_brush.get_rect(center=(gaze_pos[0] - self.canvas_rect.x, gaze_pos[1] - self.canvas_rect.y))
+                else:
+                    if self.canvas_rect.x <= gaze_pos[0] < self.canvas_rect.x + self.canvas_rect.width:
+                        tinted_brush = self.brush_image.copy()
+                        tinted_brush.fill(client_info.color, None, pygame.BLEND_MULT)
+                        tinted_brush = pygame.transform.rotate(tinted_brush, random.uniform(0, 360))
 
-                    # Copy the target portion of the canvas
-                    target_area = pygame.Surface((brush_rect.width, brush_rect.height))
-                    target_area.blit(self.canvas, (0, 0), brush_rect)
+                        brush_rect = tinted_brush.get_rect(center=(gaze_pos[0] - self.canvas_rect.x, gaze_pos[1] - self.canvas_rect.y))
 
-                    # Paint the brush on the canvas
-                    self.canvas.blit(tinted_brush, brush_rect.topleft)
+                        # Copy the target portion of the canvas
+                        target_area = pygame.Surface((brush_rect.width, brush_rect.height))
+                        target_area.blit(self.canvas, (0, 0), brush_rect)
+
+                        # Paint the brush on the canvas
+                        self.canvas.blit(tinted_brush, brush_rect.topleft)
 
             elif isinstance(data, ClientStatusMsg):
                 if data.status == 'started':

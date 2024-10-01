@@ -25,9 +25,10 @@ class SwatchesMsg:
     colors: list
 
 @dataclass
-class SwatchSelectionMsg:
+class DrawMsg:
     host: str
     color: tuple
+    enabled: bool
 
 @dataclass
 class CalculateScoreMsg:

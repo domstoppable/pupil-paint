@@ -4,7 +4,7 @@ import asyncio
 from aiohttp import web
 import json
 
-from .messages import ClientStatusMsg, SwatchesMsg, QuitMsg, SwatchSelectionMsg
+from .messages import ClientStatusMsg, SwatchesMsg, QuitMsg, DrawMsg
 
 
 class AsyncServer:
@@ -35,8 +35,8 @@ class AsyncServer:
         async for msg in ws:
             if msg.type == web.WSMsgType.TEXT:
                 data = json.loads(msg.data)
-                if data['type'] == 'swatch-selection':
-                    self.response_queue.put(SwatchSelectionMsg(request.remote, tuple(data['color'])))
+                if data['type'] == 'draw':
+                    self.response_queue.put(DrawMsg(request.remote, data['color'], data['enabled']))
 
             elif msg.type == web.WSMsgType.BINARY:
                 await ws.send_bytes(msg.data)
