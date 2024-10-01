@@ -7,11 +7,8 @@ import numpy as np
 from .messages import CalculateScoreMsg, UpdatedScoresMsg, QuitMsg
 
 
-SHARE_NAME = f'ppaint-{str(uuid4())[:8]}'
-
-
-def keep_score(width, height, command_queue, data_queue):
-    shm = shared_memory.SharedMemory(name=SHARE_NAME, create=False)
+def keep_score(width, height, shared_mem_name, command_queue, data_queue):
+    shm = shared_memory.SharedMemory(name=shared_mem_name, create=False)
     canvas = np.ndarray((width, height, 3), dtype=np.uint8, buffer=shm.buf).reshape(-1, 3)
 
     while True:

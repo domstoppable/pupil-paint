@@ -139,11 +139,13 @@ class PupilPainter:
         self.shared_canvas_data = shared_memory.SharedMemory(
             create=True,
             size=np.dtype(np.uint8).itemsize * (canvas_size[0] * canvas_size[1] * 3),
-            name=bgscore.SHARE_NAME
         )
         self.shared_canvas_as_np = np.ndarray(shape=(*canvas_size, 3), dtype=np.uint8, buffer=self.shared_canvas_data.buf).reshape(-1, 3)
 
-        self.score_proc = mp.Process(target=bgscore.keep_score, args=(*canvas_size, self.score_trigger_queue, self.new_score_queue))
+        self.score_proc = mp.Process(
+            target=bgscore.keep_score,
+            args=(*canvas_size, self.shared_canvas_data.name, self.score_trigger_queue, self.new_score_queue)
+        )
         self.score_proc.start()
 
         # Clock to control frame rate
