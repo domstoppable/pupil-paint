@@ -7,7 +7,7 @@ import numpy as np
 from .messages import CalculateScoreMsg, UpdatedScoresMsg, QuitMsg
 
 
-SHARE_NAME = f'pupil-paint-{uuid4()}'
+SHARE_NAME = f'ppaint-{str(uuid4())[:8]}'
 
 
 def keep_score(width, height, command_queue, data_queue):
