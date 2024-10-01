@@ -28,3 +28,11 @@ class SwatchesMsg:
 class SwatchSelectionMsg:
     host: str
     color: tuple
+
+@dataclass
+class CalculateScoreMsg:
+    pass
+
+@dataclass
+class UpdatedScoresMsg:
+    scores: dict

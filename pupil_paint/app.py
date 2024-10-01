@@ -1,13 +1,23 @@
 import multiprocessing as mp
+from multiprocessing import Array, shared_memory
 import random
 from pathlib import Path
 
 import pygame
+import numpy as np
 
+from . import bgscore
 from .server import run_server
 from .client import get_surface_gazes
 from .local_ip import get_local_ip
-from .messages import QuitMsg, ClientStatusMsg, GazePointMsg, SwatchesMsg, SwatchSelectionMsg
+from .messages import (
+    QuitMsg,
+    ClientStatusMsg,
+    GazePointMsg,
+    SwatchesMsg,
+    SwatchSelectionMsg,
+    CalculateScoreMsg,
+)
 from .image_helpers import make_marker, make_qr
 
 
@@ -52,7 +62,11 @@ class PupilPainter:
         self.client_info_queue = mp.Queue()
         self.server_command_queue = mp.Queue()
         self.gaze_data_queue = mp.Queue()
+        self.score_trigger_queue = mp.Queue()
+        self.new_score_queue = mp.Queue()
+
         self.server_proc = mp.Process(target=run_server, args=(self.server_command_queue, self.client_info_queue))
+        self.score_proc = None
 
         self.tag_size = 200
         self.scoreboard = {}
@@ -114,8 +128,19 @@ class PupilPainter:
         self.brush_image = pygame.image.load(brush_path).convert_alpha()
 
         # Create the canvas surface
-        self.canvas = pygame.Surface((self.canvas_rect.width, self.canvas_rect.height))
+        canvas_size = (self.canvas_rect.width, self.canvas_rect.height)
+        self.canvas = pygame.Surface(canvas_size)
         self.canvas.fill((0, 0, 0))
+
+        self.shared_canvas_data = shared_memory.SharedMemory(
+            create=True,
+            size=np.dtype(np.uint8).itemsize * (canvas_size[0] * canvas_size[1] * 3),
+            name=bgscore.SHARE_NAME
+        )
+        self.shared_canvas_as_np = np.ndarray(shape=(*canvas_size, 3), dtype=np.uint8, buffer=self.shared_canvas_data.buf).reshape(-1, 3)
+
+        self.score_proc = mp.Process(target=bgscore.keep_score, args=(*canvas_size, self.score_trigger_queue, self.new_score_queue))
+        self.score_proc.start()
 
         # Clock to control frame rate
         clock = pygame.time.Clock()
@@ -132,6 +157,10 @@ class PupilPainter:
 
             self.check_for_new_clients()
             self.check_for_new_gazes()
+            self.check_for_new_scores()
+
+            # update display
+            self.screen.fill((0, 0, 0))
 
             # paint the updated canvas to the screen
             self.screen.fill((128, 128, 128), self.canvas_rect.inflate(10, 10))
@@ -148,7 +177,11 @@ class PupilPainter:
             self.screen.blit(markers[4], (0, self.screen_height - self.tag_size))
             self.screen.blit(qr_image, ((self.screen_width - qr_image.get_size()[0]) / 2, self.screen_height - qr_image.get_size()[1]))
 
+            fps_text = self.font.render(str(round(clock.get_fps())), True, (255, 255, 255))
+            self.screen.blit(fps_text, (self.tag_size * 1.1, 0))
+
             pygame.display.flip()
+
             clock.tick(60)
 
     def check_for_events(self):
@@ -187,6 +220,7 @@ class PupilPainter:
     def check_for_new_gazes(self):
         while not self.gaze_data_queue.empty():
             data = self.gaze_data_queue.get()
+
             if isinstance(data, GazePointMsg):
                 gaze_pos = data.x, data.y
                 client_info = self.clients[data.host]
@@ -205,30 +239,25 @@ class PupilPainter:
                     # Paint the brush on the canvas
                     self.canvas.blit(tinted_brush, brush_rect.topleft)
 
-                    # Update color count for the painted area
-                    for x in range(brush_rect.left, brush_rect.right):
-                        for y in range(brush_rect.top, brush_rect.bottom):
-                            if 0 <= x < self.canvas_rect.width and 0 <= y < self.canvas_rect.height:
-                                old_color = target_area.get_at((x - brush_rect.left, y - brush_rect.top))
-                                old_color = (old_color.r, old_color.g, old_color.b)
-                                if old_color in self.scoreboard:
-                                    self.scoreboard[old_color] -= 1
-
-                                new_color = self.canvas.get_at((x, y))
-                                new_color = (new_color.r, new_color.g, new_color.b)
-                                if new_color in self.scoreboard:
-                                    self.scoreboard[new_color] += 1
-                                elif new_color in ClientMeta.colors:
-                                    self.scoreboard[new_color] = 1
-
             elif isinstance(data, ClientStatusMsg):
                 if data.status == 'started':
                     self.server_command_queue.put(data)
+
+    def check_for_new_scores(self):
+        if self.score_trigger_queue.empty():
+            surf_data = np.array(pygame.surfarray.pixels3d(self.canvas)).reshape(-1, 3)
+            self.shared_canvas_as_np[:] = surf_data[:]
+            del surf_data
+            self.score_trigger_queue.put(CalculateScoreMsg())
+
+        while not self.new_score_queue.empty():
+            self.scoreboard = self.new_score_queue.get().scores
 
     def cleanup(self):
         pygame.quit()
 
         self.server_command_queue.put(QuitMsg())
+        self.score_trigger_queue.put(QuitMsg())
 
         for c in self.clients.values():
             c.command_queue.put(QuitMsg())
@@ -240,6 +269,9 @@ class PupilPainter:
         for c in self.clients.values():
             c.process.join()
 
+        self.score_proc.join()
+        self.shared_canvas_data.unlink()
+
     def draw_scoreboard(self, ):
         total_pixels = self.canvas_rect.width * self.canvas_rect.height
 
@@ -248,10 +280,12 @@ class PupilPainter:
 
         y = self.tag_size * 1.1
         for color, score in self.scoreboard.items():
+            if color not in ClientMeta.colors:
+                continue
+
             percentage = 100 * score / total_pixels
             text = self.font.render(f"  {percentage:.2f}%", True, color)
             self.screen.blit(text, (score_rect.width - text.get_size()[0] - 5, y))
             bar_rect = pygame.Rect(10, y + 30, (score_rect.width - 20) * percentage / 100, 20)
             self.screen.fill(color, bar_rect)
             y += 80
-

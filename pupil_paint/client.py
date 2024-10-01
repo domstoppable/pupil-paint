@@ -41,7 +41,7 @@ def get_surface_gazes(host, marker_verts, surf_size, command_queue, data_queue):
         if not keep_running:
             break
 
-        data = device.receive_matched_scene_video_frame_and_gaze(1 / 30)
+        data = device.receive_matched_scene_video_frame_and_gaze(1 / 60)
         if data is None:
             continue
 
