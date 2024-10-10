@@ -7,3 +7,4 @@ python -m pupil_paint
 * Scan the QR code using your Companion device. A web page will open.
 * Tap connect and wait for the connection
 * Pick your paint color and paint with your gaze :)
+* Press `escape` to close the app
