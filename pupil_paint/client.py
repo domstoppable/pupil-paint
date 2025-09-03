@@ -22,12 +22,15 @@ def get_surface_gazes(host, marker_verts, surf_size, command_queue, data_queue):
     else:
         calibration = device.get_calibration()
 
+    print("Waiting for stream start...")
     gaze_mapper = GazeMapper(calibration)
     screen_surface = gaze_mapper.add_surface(marker_verts, surf_size)
 
     # receive one frame to initiate the stream
     device.receive_matched_scene_video_frame_and_gaze()
     data_queue.put(ClientStatusMsg(host, 'started'))
+
+    print("Stream started")
 
     keep_running = True
     while keep_running:
@@ -41,11 +44,16 @@ def get_surface_gazes(host, marker_verts, surf_size, command_queue, data_queue):
         if not keep_running:
             break
 
-        data = device.receive_matched_scene_video_frame_and_gaze(1 / 60)
-        if data is None:
+        scene = device.receive_scene_video_frame(timeout_seconds=0)
+        if scene is not None:
+            gaze_mapper.process_scene(scene)
+
+        gaze_data = device.receive_gaze_datum(timeout_seconds=0)
+
+        if gaze_data is None:
             continue
 
-        result = gaze_mapper.process_frame(*data)
+        result = gaze_mapper.process_gaze(gaze_data)
         for surface_gaze in result.mapped_gaze[screen_surface.uid]:
             data_queue.put(GazePointMsg(
                 host,
